@@ -1,0 +1,67 @@
+services:
+  traefik:
+    command:
+      - "--global.checknewversion=false"
+      - "--global.sendAnonymousUsage=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=${COMPOSE_PROJECT_NAME}_proxy"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--api=true"
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+      - "--accessLog"
+      - "--log.level=DEBUG"
+    ports:
+      - 8080:8080/tcp
+
+  restapi-go:
+    image: cosmtrek/air:v1.40.4
+    hostname: restapigo-container
+    restart: unless-stopped
+    working_dir: /src
+    depends_on:
+      - postgresql
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.restapigo.tls=true"
+      - "traefik.http.routers.restapigo.entrypoints=websecure"
+      - "traefik.http.services.restapigo.loadbalancer.server.port=80"
+      - "traefik.http.routers.restapigo.rule=Host(`restapi.go`)"
+    networks:
+      - inet
+      - proxy
+    volumes:
+      - ./:/src:rw
+    environment:
+      TZ: "Europe/Warsaw"
+
+  pgadmin:
+    image: dpage/pgadmin4:6
+    hostname: pgadmin4-container
+    restart: unless-stopped
+    depends_on:
+      - postgresql
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pgadmin.tls=true"
+      - "traefik.http.routers.pgadmin.entrypoints=websecure"
+      - "traefik.http.services.pgadmin.loadbalancer.server.port=80"
+      - "traefik.http.routers.pgadmin.rule=Host(`pgadmin.restapi.go`)"
+    networks:
+      - proxy
+      - inet
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin:rw
+    environment:
+      PGADMIN_DEFAULT_EMAIL: "user@local.lan"
+      PGADMIN_DEFAULT_PASSWORD: "12345"
+      PGADMIN_DISABLE_POSTFIX: "1"
+      TZ: "Europe/Warsaw"
+
+  postgresql:
+    environment:
+      POSTGRES_PASSWORD: "postgres"

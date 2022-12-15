@@ -1,0 +1,66 @@
+version: '3'
+
+networks:
+  proxy: {}
+  inet:
+    internal: true
+
+volumes:
+  pg-data: {}
+  pgadmin-data: {}
+
+services:
+  traefik:
+    image: traefik:v2.9
+    hostname: traefik-container
+    restart: always
+    command:
+      - "--global.checknewversion=false"
+      - "--global.sendAnonymousUsage=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=${COMPOSE_PROJECT_NAME}_proxy"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--api=false"
+    networks:
+      - proxy
+    ports:
+      - 80:80/tcp
+      - 443:443/tcp
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      TZ: "Europe/Warsaw"
+
+  restapi-go:
+    image: restapigo:latest
+    hostname: restapigo-container
+    restart: always
+    depends_on:
+      - postgresql
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.restapigo.tls=true"
+      - "traefik.http.routers.restapigo.entrypoints=websecure"
+      - "traefik.http.services.restapigo.loadbalancer.server.port=80"
+      - "traefik.http.routers.restapigo.rule=Host(`restapi.go`)"
+    networks:
+      - inet
+      - proxy
+    environment:
+      TZ: "Europe/Warsaw"
+
+  postgresql:
+    image: postgres:14.6-alpine
+    hostname: postgresql-container
+    restart: always
+    networks:
+      - inet
+    volumes:
+      - pg-data:/var/lib/postgresql/data:rw
+    environment:
+      POSTGRES_PASSWORD: "postgres"
+      TZ: "Europe/Warsaw"
